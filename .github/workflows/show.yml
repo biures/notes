@@ -1,0 +1,26 @@
+name: Show
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  show:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          days=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/" \
+                   --jq '.[].ref | sub("^refs/heads/"; "")' \
+                   | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
+          [ -n "$days" ] || { echo "empty" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          for d in $days; do
+            {
+              echo "## [$d](https://github.com/$GITHUB_REPOSITORY/tree/$d/$d)"
+              echo
+              gh api "repos/$GITHUB_REPOSITORY/contents/$d/00.md?ref=$d" --jq .content | base64 -d \
+                | sed -E "s#\]\(([0-9]{2}\.md)\)#](https://github.com/$GITHUB_REPOSITORY/blob/$d/$d/\1)#g" \
+                | sed '1d'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done

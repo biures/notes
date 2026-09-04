@@ -1,0 +1,41 @@
+name: Clear
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: what to delete
+        type: choice
+        options: [today, all, day]
+        default: today
+      day:
+        description: YYYY-MM-DD (scope = day)
+        type: string
+        required: false
+permissions:
+  contents: write
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SCOPE: ${{ inputs.scope }}
+      DAY: ${{ inputs.day }}
+    steps:
+      - run: |
+          set -e
+          case "$SCOPE" in
+            today) targets=$(TZ=Europe/Bucharest date +%F) ;;
+            day)   targets="$DAY" ;;
+            all)   targets=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/" \
+                     --jq '.[].ref | sub("^refs/heads/"; "")' \
+                     | grep -E '^(notes/)?[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true) ;;
+          esac
+          [ -n "$targets" ] || { echo "nothing to delete" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          for b in $targets; do
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$b" >/dev/null 2>&1; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b"
+              echo "deleted \`$b\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "nothing for \`$b\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done

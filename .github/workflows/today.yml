@@ -1,0 +1,19 @@
+name: Clear today
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          d=$(TZ=Europe/Bucharest date +%F)
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$d" >/dev/null 2>&1; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$d"
+            echo "deleted \`$d\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "nothing for \`$d\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
