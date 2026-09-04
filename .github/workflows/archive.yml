@@ -1,0 +1,39 @@
+name: Archive
+on:
+  push:
+    branches: ['[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]']
+permissions:
+  contents: read
+concurrency:
+  group: archive
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    env:
+      ARCHIVE_TOKEN: ${{ secrets.ARCHIVE_TOKEN }}
+      ARCHIVE_REPO: ${{ vars.ARCHIVE_REPO || 'biures/exhaustable-notes' }}
+      DAY: ${{ github.ref_name }}
+    steps:
+      - if: env.ARCHIVE_TOKEN == ''
+        run: echo "not configured" >> "$GITHUB_STEP_SUMMARY"
+      - if: env.ARCHIVE_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          path: src
+      - if: env.ARCHIVE_TOKEN != ''
+        run: |
+          set -e
+          [ -d "src/$DAY" ] || { echo "no folder for \`$DAY\`" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          git clone -q "https://x-access-token:${ARCHIVE_TOKEN}@github.com/${ARCHIVE_REPO}" dst 2>/dev/null
+          cd dst
+          git checkout -q main 2>/dev/null || git checkout -q -b main
+          rm -rf "$DAY"
+          cp -r "../src/$DAY" "$DAY"
+          git add -A "$DAY"
+          if git diff --cached --quiet; then
+            echo "\`$DAY\` already archived" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git -c user.name=biures -c user.email=30655754+biures@users.noreply.github.com commit -q -m "$DAY"
+          git push -q -u origin main
+          echo "archived \`$DAY\`" >> "$GITHUB_STEP_SUMMARY"
