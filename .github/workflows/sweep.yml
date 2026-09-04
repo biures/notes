@@ -1,0 +1,35 @@
+name: Sweep
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: delete day branches older than this many days
+        type: number
+        default: 3
+permissions:
+  contents: write
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DAYS: ${{ inputs.days || 3 }}
+    steps:
+      - run: |
+          set -e
+          cutoff=$(TZ=Europe/Bucharest date -d "-$DAYS days" +%F)
+          branches=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/" \
+                       --jq '.[].ref | sub("^refs/heads/"; "")' \
+                       | grep -E '^(notes/)?[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
+          n=0
+          for b in $branches; do
+            d=${b#notes/}
+            if [[ "$d" < "$cutoff" ]]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b"
+              echo "deleted \`$b\`" >> "$GITHUB_STEP_SUMMARY"
+              n=$((n+1))
+            fi
+          done
+          [ "$n" -gt 0 ] || echo "nothing older than \`$cutoff\`" >> "$GITHUB_STEP_SUMMARY"
