@@ -10,10 +10,17 @@ on:
         default: 3
 permissions:
   contents: write
+concurrency:
+  group: archive
 jobs:
   sweep:
-    uses: ./.github/workflows/clear.yml
-    with:
-      scope: older
-      days: ${{ inputs.days || 3 }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/clear
+        with:
+          scope: older
+          days: ${{ github.event_name == 'schedule' && '3' || inputs.days }}
+          token: ${{ github.token }}
+          archive_token: ${{ secrets.ARCHIVE_TOKEN }}
+          archive_repo: ${{ vars.ARCHIVE_REPO || 'biures/exhaustable-notes' }}

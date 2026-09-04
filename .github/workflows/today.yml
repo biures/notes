@@ -3,9 +3,16 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: archive
 jobs:
   today:
-    uses: ./.github/workflows/clear.yml
-    with:
-      scope: today
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/clear
+        with:
+          scope: today
+          token: ${{ github.token }}
+          archive_token: ${{ secrets.ARCHIVE_TOKEN }}
+          archive_repo: ${{ vars.ARCHIVE_REPO || 'biures/exhaustable-notes' }}

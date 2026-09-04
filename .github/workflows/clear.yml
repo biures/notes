@@ -15,17 +15,6 @@ on:
         description: keep this many days (scope = older)
         type: number
         default: 3
-  workflow_call:
-    inputs:
-      scope:
-        type: string
-        required: true
-      day:
-        type: string
-        default: ''
-      days:
-        type: number
-        default: 3
 permissions:
   contents: write
 concurrency:
@@ -33,43 +22,13 @@ concurrency:
 jobs:
   clear:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      ARCHIVE_TOKEN: ${{ secrets.ARCHIVE_TOKEN }}
-      ARCHIVE_REPO: ${{ vars.ARCHIVE_REPO || 'biures/exhaustable-notes' }}
-      SCOPE: ${{ inputs.scope }}
-      DAY: ${{ inputs.day }}
-      DAYS: ${{ inputs.days || 3 }}
     steps:
-      - run: |
-          set -e
-          today=$(TZ=Europe/Bucharest date +%F)
-          all=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/" \
-                  --jq '.[].ref | sub("^refs/heads/"; "")' \
-                  | grep -E '^(notes/)?[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
-          case "$SCOPE" in
-            today) targets=$today ;;
-            day)   targets="$DAY" ;;
-            all)   targets="$all" ;;
-            older) cutoff=$(TZ=Europe/Bucharest date -d "-$DAYS days" +%F)
-                   targets=$(for b in $all; do d=${b#notes/}; [[ "$d" < "$cutoff" ]] && echo "$b"; done; true) ;;
-            *)     echo "unknown scope: $SCOPE"; exit 1 ;;
-          esac
-          [ -n "$targets" ] || { echo "nothing to delete" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
-          for b in $targets; do
-            d=${b#notes/}
-            if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$b" >/dev/null 2>&1; then
-              echo "nothing for \`$b\`" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            if [ -n "$ARCHIVE_TOKEN" ]; then
-              want=$(gh api "repos/$GITHUB_REPOSITORY/contents/$d?ref=$b" --jq '.[].name' 2>/dev/null | sort || true)
-              have=$(GH_TOKEN=$ARCHIVE_TOKEN gh api "repos/$ARCHIVE_REPO/contents/$d" --jq '.[].name' 2>/dev/null | sort || true)
-              if [ -n "$want" ] && [ -n "$(comm -23 <(echo "$want") <(echo "$have"))" ]; then
-                echo "kept \`$b\`: not archived yet" >> "$GITHUB_STEP_SUMMARY"
-                continue
-              fi
-            fi
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b"
-            echo "deleted \`$b\`" >> "$GITHUB_STEP_SUMMARY"
-          done
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/clear
+        with:
+          scope: ${{ inputs.scope }}
+          day: ${{ inputs.day }}
+          days: ${{ inputs.days }}
+          token: ${{ github.token }}
+          archive_token: ${{ secrets.ARCHIVE_TOKEN }}
+          archive_repo: ${{ vars.ARCHIVE_REPO || 'biures/exhaustable-notes' }}
